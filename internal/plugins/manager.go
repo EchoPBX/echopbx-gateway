@@ -2,6 +2,8 @@ package plugins
 
 import (
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"plugin"
 	"sync"
@@ -12,7 +14,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// PluginManifest describe el archivo plugins.json
 type PluginManifest struct {
 	Plugins []PluginEntry `json:"plugins"`
 }
@@ -33,7 +34,6 @@ type PluginUI struct {
 	Path string `json:"path"`
 }
 
-// Manager controla los plugins cargados
 type Manager struct {
 	cfg     *config.Config
 	log     *zap.Logger
@@ -51,64 +51,83 @@ func NewManager(cfg *config.Config, log *zap.Logger, bus sdk.Bus) *Manager {
 	}
 }
 
-// LoadManifest carga plugins.json y los inicializa
 func (m *Manager) LoadManifest(path string) error {
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return err
+		return fmt.Errorf("read manifest: %w", err)
 	}
-	var manifest PluginManifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return err
-	}
-
-	for _, p := range manifest.Plugins {
-		if err := m.loadPlugin(p); err != nil {
-			m.log.Error("failed to load plugin",
-				zap.String("name", p.Name),
-				zap.Error(err))
-		}
-	}
-	return nil
-}
-
-func (m *Manager) loadPlugin(entry PluginEntry) error {
-	p, err := plugin.Open(entry.Server.Path)
-	if err != nil {
-		return err
-	}
-	sym, err := p.Lookup(entry.Server.Entry)
-	if err != nil {
-		return err
-	}
-
-	plug, ok := sym.(sdk.Plugin)
-	if !ok {
-		return err
-	}
-
-	ctx := sdk.NewContext(m.log.With(zap.String("plugin", entry.Name)), m.bus)
-	if err := plug.Init(ctx); err != nil {
-		return err
+	var man PluginManifest
+	if err := json.Unmarshal(data, &man); err != nil {
+		return fmt.Errorf("unmarshal manifest: %w", err)
 	}
 
 	m.mu.Lock()
-	m.plugins[entry.Name] = plug
+	for name, p := range m.plugins {
+		if err := p.Stop(); err != nil {
+			m.log.Warn("plugin stop failed", zap.String("name", name), zap.Error(err))
+		}
+	}
+	m.plugins = make(map[string]sdk.Plugin)
+	m.mu.Unlock()
+
+	for _, entry := range man.Plugins {
+		if err := m.loadOne(entry); err != nil {
+			m.log.Error("load plugin failed",
+				zap.String("name", entry.Name),
+				zap.String("path", entry.Server.Path),
+				zap.Error(err))
+			continue
+		}
+	}
+
+	return nil
+}
+
+func (m *Manager) loadOne(entry PluginEntry) error {
+	if entry.Server.Path == "" || entry.Server.Entry == "" {
+		return errors.New("invalid server path/entry")
+	}
+
+	m.log.Info("loading plugin", zap.String("name", entry.Name), zap.String("path", entry.Server.Path))
+
+	plug, err := plugin.Open(entry.Server.Path)
+	if err != nil {
+		return fmt.Errorf("plugin.Open: %w", err)
+	}
+	sym, err := plug.Lookup(entry.Server.Entry)
+	if err != nil {
+		return fmt.Errorf("lookup(%s): %w", entry.Server.Entry, err)
+	}
+
+	pl, ok := sym.(sdk.Plugin)
+	if !ok {
+		return fmt.Errorf("symbol %s does not implement sdk.Plugin", entry.Server.Entry)
+	}
+
+	ctx := newPluginContext(
+		m.log.Named("plugin."+entry.Name),
+		m.bus,
+		map[string]interface{}{},
+	)
+
+	if err := pl.Init(ctx); err != nil {
+		return fmt.Errorf("plugin init: %w", err)
+	}
+
+	m.mu.Lock()
+	m.plugins[entry.Name] = pl
 	m.mu.Unlock()
 
 	m.bus.Publish(sdk.Event{
 		Type: "plugin.loaded",
-		Data: map[string]any{
+		Data: map[string]interface{}{
 			"name":    entry.Name,
 			"version": entry.Version,
 			"time":    time.Now().Unix(),
 		},
 	})
 
-	m.log.Info("plugin loaded",
-		zap.String("name", entry.Name),
-		zap.String("version", entry.Version))
-
+	m.log.Info("plugin initialized", zap.String("name", entry.Name), zap.String("version", entry.Version))
 	return nil
 }
 
@@ -119,9 +138,7 @@ func (m *Manager) Reload(path string) {
 	}
 	m.bus.Publish(sdk.Event{
 		Type: "plugins.reloaded",
-		Data: map[string]any{
-			"time": time.Now().Unix(),
-		},
+		Data: map[string]interface{}{"time": time.Now().Unix()},
 	})
 }
 

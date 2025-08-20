@@ -1,12 +1,10 @@
 package events
 
-import "sync"
-import "github.com/EchoPBX/echopbx-gateway/pkg/sdk"
+import (
+	"sync"
 
-type Event struct {
-	Type string
-	Data any
-}
+	"github.com/EchoPBX/echopbx-gateway/pkg/sdk"
+)
 
 type Bus struct {
 	mu   sync.RWMutex
@@ -14,9 +12,18 @@ type Bus struct {
 }
 
 func NewBus() *Bus {
-	return &Bus{
-		subs: make(map[chan sdk.Event]struct{}),
+	return &Bus{subs: make(map[chan sdk.Event]struct{})}
+}
+
+func (b *Bus) Publish(ev sdk.Event) {
+	b.mu.RLock()
+	for ch := range b.subs {
+		select {
+		case ch <- ev:
+		default:
+		}
 	}
+	b.mu.RUnlock()
 }
 
 func (b *Bus) Subscribe() chan sdk.Event {
@@ -29,19 +36,9 @@ func (b *Bus) Subscribe() chan sdk.Event {
 
 func (b *Bus) Unsubscribe(ch chan sdk.Event) {
 	b.mu.Lock()
-	delete(b.subs, ch)
-	close(ch)
-	b.mu.Unlock()
-}
-
-func (b *Bus) Publish(ev sdk.Event) {
-	b.mu.RLock()
-	defer b.mu.RUnlock()
-
-	for ch := range b.subs {
-		select {
-		case ch <- ev:
-		default:
-		}
+	if _, ok := b.subs[ch]; ok {
+		delete(b.subs, ch)
+		close(ch)
 	}
+	b.mu.Unlock()
 }
