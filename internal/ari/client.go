@@ -10,6 +10,7 @@ import (
 
 	"github.com/EchoPBX/echopbx-gateway/internal/config"
 	"github.com/EchoPBX/echopbx-gateway/internal/events"
+	"github.com/EchoPBX/echopbx-gateway/pkg/sdk"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
@@ -48,7 +49,7 @@ func (c *Client) Run(ctx context.Context) {
 				c.log.Warn("ARI read", zap.Error(err))
 				break
 			}
-			c.bus.Publish(events.Event{Type: "ari.event", Data: msg})
+			c.bus.Publish(sdk.Event{Type: "ari.event", Data: msg})
 		}
 		conn.Close()
 		time.Sleep(1 * time.Second)
@@ -62,7 +63,7 @@ func (c *Client) runFake(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case t := <-t.C:
-			c.bus.Publish(events.Event{Type: "ari.event", Data: map[string]any{"type": "StasisStart", "ts": t.Unix()}})
+			c.bus.Publish(sdk.Event{Type: "ari.event", Data: map[string]any{"type": "StasisStart", "ts": t.Unix()}})
 		}
 	}
 }
