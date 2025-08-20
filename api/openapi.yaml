@@ -1,0 +1,27 @@
+openapi: 3.0.3
+info:
+  title: EchoPBX Gateway API
+  version: 0.1.0
+servers:
+  - url: http://localhost:8080
+paths:
+  /healthz:
+    get:
+      responses:
+        '200': { description: OK }
+  /v1/info:
+    get:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Info }
+  /v1/calls:
+    get:
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Calls }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

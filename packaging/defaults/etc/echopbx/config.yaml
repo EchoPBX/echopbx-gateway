@@ -1,0 +1,19 @@
+http:
+  bind: 0.0.0.0
+  port: 8080
+  tls:
+    enabled: false
+logging:
+  level: info
+  json: true
+auth:
+  jwt_public_keys:
+    - /etc/echopbx/keys/jwt_pub.pem
+  issuer: echopbx
+  audience: web
+ari:
+  url: "wss://127.0.0.1:8089/ari/events?api_key=user:pass&app=echopbx"
+  app: echopbx
+  api_key: "user:pass"
+  insecure: true
+  fake_ari: true

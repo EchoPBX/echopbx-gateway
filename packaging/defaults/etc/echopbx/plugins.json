@@ -1,0 +1,6 @@
+{
+  "plugins": [
+    {"name": "ivr", "version": "0.1.0", "path": "/var/lib/echopbx/plugins/ivr/0.1.0/server", "enabled": true},
+    {"name": "queues", "version": "0.1.0", "path": "/var/lib/echopbx/plugins/queues/0.1.0/server", "enabled": false}
+  ]
+}

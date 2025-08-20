@@ -1,0 +1,16 @@
+[Unit]
+Description=EchoPBX Gateway
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=echopbx
+Group=echopbx
+ExecStart=/usr/bin/echopbx-gateway
+Environment=ECHOPBX_CONFIG=/etc/echopbx/config.yaml
+Restart=on-failure
+RestartSec=2
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
